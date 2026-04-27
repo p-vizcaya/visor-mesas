@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
+import gdown
+import os
 
-archivo = "base_camara_preconteo_2026.csv"
+FILE_ID = "11lWEo9_-EnK1bV--LrfYgQT2VqF3HHc1"
+LOCAL_FILE = "base_camara_preconteo_2026.csv"
 
 cols = [
     "id_mesa",
@@ -13,9 +16,17 @@ cols = [
     "nombre_puesto"
 ]
 
-# Carga de datos
+@st.cache_data
+def download_file():
+    if not os.path.exists(LOCAL_FILE):
+        url = f"https://drive.google.com/uc?id={FILE_ID}"
+        gdown.download(url, LOCAL_FILE, quiet=False)
+    return LOCAL_FILE
+
 @st.cache_data
 def load_data():
+    archivo = download_file()
+
     df = pd.read_csv(
         archivo,
         usecols=lambda c: c in cols,
@@ -24,7 +35,6 @@ def load_data():
         keep_default_na=False
     )
 
-    # Limpieza
     for col in df.columns:
         df[col] = (
             df[col]
@@ -39,33 +49,20 @@ def load_data():
 
 df = load_data()
 
-# UI
 st.title("Consulta de resultados por mesa")
 
-# Selector
 mesas = sorted(df["id_mesa"].dropna().unique())
 
-mesa = st.selectbox(
-    "Seleccione una mesa",
-    mesas
-)
+mesa = st.selectbox("Seleccione una mesa", mesas)
 
-# Filtrado
 res = df[df["id_mesa"] == mesa]
 
-# Agrupación
 resumen = (
     res.groupby(["nom_candi", "nombre_partido"], as_index=False)["votos"]
     .sum()
     .sort_values("votos", ascending=False)
 )
 
-# Visualización
 st.subheader(f"Resultados para mesa {mesa}")
-
-st.dataframe(
-    resumen,
-    width="stretch"
-)
-
+st.dataframe(resumen, width="stretch")
 st.metric("Total votos", int(resumen["votos"].sum()))
