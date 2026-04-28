@@ -16,53 +16,61 @@ cols = [
     "nombre_puesto"
 ]
 
-@st.cache_data
+@st.cache_resource
 def download_file():
     if not os.path.exists(LOCAL_FILE):
         url = f"https://drive.google.com/uc?id={FILE_ID}"
         gdown.download(url, LOCAL_FILE, quiet=False)
     return LOCAL_FILE
 
-@st.cache_data
-def load_data():
-    archivo = download_file()
+def limpiar_id(s):
+    return str(s).strip().replace('"', '').replace("'", "")
 
-    df = pd.read_csv(
+def buscar_mesa(id_mesa):
+    archivo = download_file()
+    mesa_limpia = limpiar_id(id_mesa)
+
+    partes = []
+
+    for chunk in pd.read_csv(
         archivo,
         usecols=lambda c: c in cols,
         dtype="string",
         encoding="utf-8",
-        keep_default_na=False
-    )
+        keep_default_na=False,
+        chunksize=200_000
+    ):
+        chunk["id_mesa"] = chunk["id_mesa"].str.strip().str.replace('"', '', regex=False)
 
-    for col in df.columns:
-        df[col] = (
-            df[col]
-            .astype("string")
-            .str.strip()
-            .str.replace('"', '', regex=False)
-        )
+        filtro = chunk[chunk["id_mesa"] == mesa_limpia]
 
-    df["votos"] = pd.to_numeric(df["votos"], errors="coerce").fillna(0).astype("int32")
+        if not filtro.empty:
+            partes.append(filtro)
 
-    return df
+    if partes:
+        return pd.concat(partes, ignore_index=True)
 
-df = load_data()
+    return pd.DataFrame(columns=cols)
 
+# UI
 st.title("Consulta de resultados por mesa")
 
-mesas = sorted(df["id_mesa"].dropna().unique())
+mesa = st.text_input("Ingrese el ID de la mesa", "010010101000001")
 
-mesa = st.selectbox("Seleccione una mesa", mesas)
+if st.button("Consultar"):
+    res = buscar_mesa(mesa)
 
-res = df[df["id_mesa"] == mesa]
+    if res.empty:
+        st.warning("No se encontraron resultados.")
+    else:
+        res["votos"] = pd.to_numeric(res["votos"], errors="coerce").fillna(0).astype("int32")
 
-resumen = (
-    res.groupby(["nom_candi", "nombre_partido"], as_index=False)["votos"]
-    .sum()
-    .sort_values("votos", ascending=False)
-)
+        resumen = (
+            res.groupby(["nom_candi", "nombre_partido"], as_index=False)["votos"]
+            .sum()
+            .sort_values("votos", ascending=False)
+        )
 
-st.subheader(f"Resultados para mesa {mesa}")
-st.dataframe(resumen, width="stretch")
-st.metric("Total votos", int(resumen["votos"].sum()))
+        st.subheader(f"Resultados para mesa {mesa}")
+        st.dataframe(resumen, width="stretch")
+        st.metric("Total votos", int(resumen["votos"].sum()))
