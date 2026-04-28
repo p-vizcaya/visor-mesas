@@ -16,7 +16,7 @@ cols = [
     "nombre_puesto"
 ]
 
-@st.cache_resource
+@st.cache_data(show_spinner=True)
 def download_file():
     if not os.path.exists(LOCAL_FILE):
         url = f"https://drive.google.com/uc?id={FILE_ID}"
@@ -55,10 +55,11 @@ def buscar_mesa(id_mesa):
 # UI
 st.title("Consulta de resultados por mesa")
 
-mesa = st.text_input("Ingrese el ID de la mesa", "010010101000001")
+mesa = st.text_input("Ingrese el ID de la mesa", "")
 
 if st.button("Consultar"):
-    res = buscar_mesa(mesa)
+    with st.spinner("Buscando mesa..."):
+        res = buscar_mesa(mesa)
 
     if res.empty:
         st.warning("No se encontraron resultados.")
