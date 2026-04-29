@@ -13,7 +13,6 @@ def get_client():
     )
     return bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
-@st.cache_data(ttl=600)
 def run_query(query, params=None):
     client = get_client()
     job_config = bigquery.QueryJobConfig(query_parameters=params or [])
