@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from google.cloud import bigquery
 from google.oauth2 import service_account
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 PROJECT_ID = "elecciones-publico"
 TABLE_ID = "`elecciones-publico.DatosElectorales.BaseAppLimpia`"
@@ -103,15 +105,19 @@ if st.button("Consultar resultados"):
     resultados = resultados.reset_index(drop=True)
     resultados.insert(0, "fila", resultados.index + 1)
 
+    fecha_consulta = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
+
     resultados["departamento"] = departamento
     resultados["municipio"] = municipio
     resultados["puesto"] = puesto
     resultados["mesa"] = mesa
+    resultados["fecha_consulta"] = fecha_consulta
     resultados["total_votos_mesa"] = total_votos
 
     columnas_mostrar = ["fila", "code_candi", "nom_candi", "nombre_partido", "votos"]
 
     columnas_exportar = [
+        "fecha_consulta",
         "departamento",
         "municipio",
         "puesto",
@@ -125,15 +131,22 @@ if st.button("Consultar resultados"):
     ]
 
     st.subheader(f"Resultados mesa {mesa}")
+    st.caption(f"Consulta generada: {fecha_consulta} hora Colombia")
+
+    tabla = resultados[columnas_mostrar].style.set_properties(
+        subset=["votos"],
+        **{"text-align": "center"}
+    ).set_table_styles([
+        {
+            "selector": "th.col_heading.level0.col4",
+            "props": [("text-align", "center")]
+        }
+    ])
 
     st.dataframe(
-        resultados[columnas_mostrar],
+        tabla,
         width="stretch",
-        hide_index=True,
-        column_config={
-            "fila": st.column_config.NumberColumn("Fila", width="small"),
-            "votos": st.column_config.NumberColumn("Votos", width="small", format="%d"),
-        },
+        hide_index=True
     )
 
     st.metric("Total votos", total_votos)
