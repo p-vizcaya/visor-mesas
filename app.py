@@ -80,6 +80,7 @@ if st.button("Consultar resultados"):
     resultados = run_query(
         f"""
         SELECT
+          id_mesa,
           code_candi,
           nom_candi,
           nombre_partido,
@@ -113,6 +114,9 @@ if st.button("Consultar resultados"):
     resultados["mesa"] = mesa
     resultados["fecha_consulta"] = fecha_consulta
     resultados["total_votos_mesa"] = total_votos
+    resultados = resultados.drop(columns=["id_mesa"])
+
+    codigo_mesa = resultados["id_mesa"].iloc[0]
 
     columnas_mostrar = ["fila", "code_candi", "nom_candi", "nombre_partido", "votos"]
 
@@ -130,7 +134,7 @@ if st.button("Consultar resultados"):
         "votos",
     ]
 
-    st.subheader(f"Resultados mesa {mesa}")
+    st.subheader(f"Resultados mesa {codigo_mesa}")
     st.caption(f"Consulta generada: {fecha_consulta} hora Colombia")
 
     tabla = resultados[columnas_mostrar].style.set_properties(
@@ -156,6 +160,6 @@ if st.button("Consultar resultados"):
     st.download_button(
         label="Descargar CSV",
         data=csv,
-        file_name=f"resultados_mesa_{mesa}.csv",
+        file_name=f"resultados_mesa_{codigo_mesa}.csv"
         mime="text/csv",
     )
