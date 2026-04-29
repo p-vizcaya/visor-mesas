@@ -1,77 +1,104 @@
 import streamlit as st
 import pandas as pd
-import gdown
-import os
+from google.cloud import bigquery
+from google.oauth2 import service_account
 
-FILE_ID = "11lWEo9_-EnK1bV--LrfYgQT2VqF3HHc1"
-LOCAL_FILE = "base_camara_preconteo_2026.csv"
+PROJECT_ID = "elecciones-publico"
+TABLE_ID = "`elecciones-publico.DatosElectorales.BaseAppLimpia`"
 
-cols = [
-    "id_mesa",
-    "nom_candi",
-    "nombre_partido",
-    "votos",
-    "nombre_departamento",
-    "nombre_municipio",
-    "nombre_puesto"
-]
+@st.cache_resource
+def get_client():
+    credentials = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"]
+    )
+    return bigquery.Client(credentials=credentials, project=PROJECT_ID)
 
-@st.cache_data(show_spinner=True)
-def download_file():
-    if not os.path.exists(LOCAL_FILE):
-        url = f"https://drive.google.com/uc?id={FILE_ID}"
-        gdown.download(url, LOCAL_FILE, quiet=False)
-    return LOCAL_FILE
+@st.cache_data(ttl=600)
+def run_query(query, params=None):
+    client = get_client()
+    job_config = bigquery.QueryJobConfig(query_parameters=params or [])
+    return client.query(query, job_config=job_config).to_dataframe()
 
-def limpiar_id(s):
-    return str(s).strip().replace('"', '').replace("'", "")
-
-def buscar_mesa(id_mesa):
-    archivo = download_file()
-    mesa_limpia = limpiar_id(id_mesa)
-
-    partes = []
-
-    for chunk in pd.read_csv(
-        archivo,
-        usecols=lambda c: c in cols,
-        dtype="string",
-        encoding="utf-8",
-        keep_default_na=False,
-        chunksize=200_000
-    ):
-        chunk["id_mesa"] = chunk["id_mesa"].str.strip().str.replace('"', '', regex=False)
-
-        filtro = chunk[chunk["id_mesa"] == mesa_limpia]
-
-        if not filtro.empty:
-            partes.append(filtro)
-
-    if partes:
-        return pd.concat(partes, ignore_index=True)
-
-    return pd.DataFrame(columns=cols)
-
-# UI
 st.title("Consulta de resultados por mesa")
 
-mesa = st.text_input("Ingrese el ID de la mesa", "")
+departamentos = run_query(f"""
+    SELECT DISTINCT nombre_departamento
+    FROM {TABLE_ID}
+    ORDER BY nombre_departamento
+""")["nombre_departamento"].tolist()
 
-if st.button("Consultar"):
-    with st.spinner("Buscando mesa..."):
-        res = buscar_mesa(mesa)
+departamento = st.selectbox("Departamento", departamentos)
 
-    if res.empty:
-        st.warning("No se encontraron resultados.")
-    else:
-        res["votos"] = pd.to_numeric(res["votos"], errors="coerce").fillna(0).astype("int32")
+municipios = run_query(
+    f"""
+    SELECT DISTINCT nombre_municipio
+    FROM {TABLE_ID}
+    WHERE nombre_departamento = @departamento
+    ORDER BY nombre_municipio
+    """,
+    [bigquery.ScalarQueryParameter("departamento", "STRING", departamento)]
+)["nombre_municipio"].tolist()
 
-        resumen = (
-            res.groupby(["nom_candi", "nombre_partido"], as_index=False)["votos"]
-            .sum()
-            .sort_values("votos", ascending=False)
-        )
+municipio = st.selectbox("Municipio", municipios)
 
-        st.subheader(f"Resultados para mesa {mesa}")
-        st.dataframe(resumen, width="stretch")
-        st.metric("Total votos", int(resumen["votos"].sum()))
+puestos = run_query(
+    f"""
+    SELECT DISTINCT nombre_puesto
+    FROM {TABLE_ID}
+    WHERE nombre_departamento = @departamento
+      AND nombre_municipio = @municipio
+    ORDER BY nombre_puesto
+    """,
+    [
+        bigquery.ScalarQueryParameter("departamento", "STRING", departamento),
+        bigquery.ScalarQueryParameter("municipio", "STRING", municipio),
+    ],
+)["nombre_puesto"].tolist()
+
+puesto = st.selectbox("Puesto", puestos)
+
+mesas = run_query(
+    f"""
+    SELECT DISTINCT numero_mesa
+    FROM {TABLE_ID}
+    WHERE nombre_departamento = @departamento
+      AND nombre_municipio = @municipio
+      AND nombre_puesto = @puesto
+    ORDER BY numero_mesa
+    """,
+    [
+        bigquery.ScalarQueryParameter("departamento", "STRING", departamento),
+        bigquery.ScalarQueryParameter("municipio", "STRING", municipio),
+        bigquery.ScalarQueryParameter("puesto", "STRING", puesto),
+    ],
+)["numero_mesa"].tolist()
+
+mesa = st.selectbox("Mesa", mesas)
+
+if st.button("Consultar resultados"):
+    resultados = run_query(
+        f"""
+        SELECT
+          code_candi,
+          nom_candi,
+          nombre_partido,
+          SUM(votos) AS votos
+        FROM {TABLE_ID}
+        WHERE nombre_departamento = @departamento
+          AND nombre_municipio = @municipio
+          AND nombre_puesto = @puesto
+          AND numero_mesa = @mesa
+        GROUP BY code_candi, nom_candi, nombre_partido
+        ORDER BY votos DESC
+        """,
+        [
+            bigquery.ScalarQueryParameter("departamento", "STRING", departamento),
+            bigquery.ScalarQueryParameter("municipio", "STRING", municipio),
+            bigquery.ScalarQueryParameter("puesto", "STRING", puesto),
+            bigquery.ScalarQueryParameter("mesa", "STRING", mesa),
+        ],
+    )
+
+    st.subheader(f"Resultados mesa {mesa}")
+    st.dataframe(resultados, width="stretch")
+    st.metric("Total votos", int(resultados["votos"].sum()))
