@@ -114,7 +114,7 @@ if st.button("Consultar resultados"):
     # PROCESAMIENTO
     # =========================
 
-    codigo_mesa = resultados["id_mesa"].iloc[0]
+    codigo_mesa = str(resultados["id_mesa"].iloc[0])
     total_votos = int(resultados["votos"].sum())
 
     fecha_consulta = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
@@ -127,7 +127,7 @@ if st.button("Consultar resultados"):
     resultados["municipio"] = municipio
     resultados["puesto"] = puesto
     resultados["mesa"] = mesa
-    resultados["codigo_mesa"] = codigo_mesa
+    resultados["codigo_mesa_texto"] = '="' + codigo_mesa + '"'
     resultados["fecha_consulta"] = fecha_consulta
     resultados["total_votos_mesa"] = total_votos
 
@@ -135,7 +135,7 @@ if st.button("Consultar resultados"):
 
     columnas_exportar = [
         "fecha_consulta",
-        "codigo_mesa",
+        "codigo_mesa_texto",
         "departamento",
         "municipio",
         "puesto",
