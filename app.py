@@ -22,6 +22,10 @@ def run_query(query, params=None):
 
 st.title("Consulta de resultados por mesa")
 
+# =========================
+# FILTROS
+# =========================
+
 departamentos = run_query(f"""
     SELECT DISTINCT nombre_departamento
     FROM {TABLE_ID}
@@ -76,7 +80,12 @@ mesas = run_query(
 
 mesa = st.selectbox("Mesa", mesas)
 
+# =========================
+# CONSULTA
+# =========================
+
 if st.button("Consultar resultados"):
+
     resultados = run_query(
         f"""
         SELECT
@@ -90,7 +99,7 @@ if st.button("Consultar resultados"):
           AND nombre_municipio = @municipio
           AND nombre_puesto = @puesto
           AND numero_mesa = @mesa
-        GROUP BY code_candi, nom_candi, nombre_partido
+        GROUP BY id_mesa, code_candi, nom_candi, nombre_partido
         ORDER BY votos DESC
         """,
         [
@@ -101,27 +110,32 @@ if st.button("Consultar resultados"):
         ],
     )
 
+    # =========================
+    # PROCESAMIENTO
+    # =========================
+
+    codigo_mesa = resultados["id_mesa"].iloc[0]
     total_votos = int(resultados["votos"].sum())
+
+    fecha_consulta = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
     resultados = resultados.reset_index(drop=True)
     resultados.insert(0, "fila", resultados.index + 1)
 
-    fecha_consulta = datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
-
+    # Agregar contexto para CSV
     resultados["departamento"] = departamento
     resultados["municipio"] = municipio
     resultados["puesto"] = puesto
     resultados["mesa"] = mesa
+    resultados["codigo_mesa"] = codigo_mesa
     resultados["fecha_consulta"] = fecha_consulta
     resultados["total_votos_mesa"] = total_votos
-    resultados = resultados.drop(columns=["id_mesa"])
-
-    codigo_mesa = resultados["id_mesa"].iloc[0]
 
     columnas_mostrar = ["fila", "code_candi", "nom_candi", "nombre_partido", "votos"]
 
     columnas_exportar = [
         "fecha_consulta",
+        "codigo_mesa",
         "departamento",
         "municipio",
         "puesto",
@@ -134,26 +148,25 @@ if st.button("Consultar resultados"):
         "votos",
     ]
 
+    # =========================
+    # VISUALIZACIÓN
+    # =========================
+
     st.subheader(f"Resultados mesa {codigo_mesa}")
     st.caption(f"Consulta generada: {fecha_consulta} hora Colombia")
 
     tabla = resultados[columnas_mostrar].style.set_properties(
         subset=["votos"],
         **{"text-align": "center"}
-    ).set_table_styles([
-        {
-            "selector": "th.col_heading.level0.col4",
-            "props": [("text-align", "center")]
-        }
-    ])
-
-    st.dataframe(
-        tabla,
-        width="stretch",
-        hide_index=True
     )
 
+    st.dataframe(tabla, width="stretch", hide_index=True)
+
     st.metric("Total votos", total_votos)
+
+    # =========================
+    # EXPORTACIÓN CSV
+    # =========================
 
     csv = resultados[columnas_exportar].to_csv(index=False).encode("utf-8-sig")
 
