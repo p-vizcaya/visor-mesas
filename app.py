@@ -98,6 +98,51 @@ if st.button("Consultar resultados"):
         ],
     )
 
+    total_votos = int(resultados["votos"].sum())
+
+    resultados = resultados.reset_index(drop=True)
+    resultados.insert(0, "fila", resultados.index + 1)
+
+    resultados["departamento"] = departamento
+    resultados["municipio"] = municipio
+    resultados["puesto"] = puesto
+    resultados["mesa"] = mesa
+    resultados["total_votos_mesa"] = total_votos
+
+    columnas_mostrar = ["fila", "code_candi", "nom_candi", "nombre_partido", "votos"]
+
+    columnas_exportar = [
+        "departamento",
+        "municipio",
+        "puesto",
+        "mesa",
+        "total_votos_mesa",
+        "fila",
+        "code_candi",
+        "nom_candi",
+        "nombre_partido",
+        "votos",
+    ]
+
     st.subheader(f"Resultados mesa {mesa}")
-    st.dataframe(resultados, width="stretch")
-    st.metric("Total votos", int(resultados["votos"].sum()))
+
+    st.dataframe(
+        resultados[columnas_mostrar],
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "fila": st.column_config.NumberColumn("Fila", width="small"),
+            "votos": st.column_config.NumberColumn("Votos", width="small", format="%d"),
+        },
+    )
+
+    st.metric("Total votos", total_votos)
+
+    csv = resultados[columnas_exportar].to_csv(index=False).encode("utf-8-sig")
+
+    st.download_button(
+        label="Descargar CSV",
+        data=csv,
+        file_name=f"resultados_mesa_{mesa}.csv",
+        mime="text/csv",
+    )
