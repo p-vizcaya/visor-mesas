@@ -160,6 +160,6 @@ if st.button("Consultar resultados"):
     st.download_button(
         label="Descargar CSV",
         data=csv,
-        file_name=f"resultados_mesa_{codigo_mesa}.csv"
+        file_name=f"resultados_mesa_{codigo_mesa}.csv",
         mime="text/csv",
     )
